@@ -105,12 +105,26 @@ passport.deserializeUser((id, done) => {
 });
  */
 
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const accessToken = authHeader && authHeader.split(" ")[1];
+  const refreshToken = req.headers.cookie?.split("=")[1];
 
-  if (!accessToken) {
-    return res.status(401).json({ message: "Access token is required" });
+  if (!accessToken || !refreshToken) {
+    return res.status(401).json({ message: "Missing Token" });
+  }
+
+  const decodedRefreshToken = jwt.verify(
+    refreshToken,
+    process.env.REFRESH_TOKEN_SECRET
+  );
+
+  const refreshTokenDBObject = await RefreshToken.findOne({
+    userId: decodedRefreshToken.sub,
+  });
+
+  if (!refreshTokenDBObject) {
+    return res.status(403).json({ message: "ebi si maikata" });
   }
 
   jwt.verify(
@@ -118,8 +132,8 @@ const authenticateToken = (req, res, next) => {
     process.env.ACCESS_TOKEN_SECRET,
     async (err, user) => {
       if (err) {
+        /* Access Token has expired, try to get a new access token using the refresh token from cookies */
         if (err.name === "TokenExpiredError") {
-          // Token has expired, try to get a new access token using the refresh token from cookies
           const refreshToken = req.headers.cookie.split("=")[1];
 
           if (!refreshToken) {
@@ -128,14 +142,14 @@ const authenticateToken = (req, res, next) => {
 
           try {
             // Verify refresh token
-            const decoded = jwt.verify(
+            const decodedRefreshToken = jwt.verify(
               refreshToken,
               process.env.REFRESH_TOKEN_SECRET
             );
-            console.log("decoded:", decoded);
+
             // Check if the refresh token is still valid
             const refreshTokenDBObject = await RefreshToken.findOne({
-              userId: decoded.sub,
+              userId: decodedRefreshToken.sub,
               token: refreshToken,
             });
 
@@ -147,14 +161,14 @@ const authenticateToken = (req, res, next) => {
             }
 
             const newAccessToken = generateAccessToken({
-              id: decoded.sub,
-              username: decoded.username,
+              id: decodedRefreshToken.sub,
+              username: decodedRefreshToken.username,
             });
 
             req.accessToken = newAccessToken;
             req.user = {
-              id: decoded.sub,
-              username: decoded.username,
+              id: decodedRefreshToken.sub,
+              username: decodedRefreshToken.username,
             };
             next();
           } catch (refreshError) {
@@ -186,13 +200,14 @@ app.post("/register", async (req, res) => {
 
     // Create a new user
     const newUser = new User({ username, password, name, email });
+
     await newUser.save();
 
     // Generate JWT access token
     const accessToken = generateAccessToken(newUser);
 
     // Generate refresh token
-    const refreshToken = generateAndSaveRefreshToken(newUser);
+    const refreshToken = await generateAndSaveRefreshToken(newUser);
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -210,34 +225,38 @@ app.post("/register", async (req, res) => {
 });
 
 app.post("/login", (req, res, next) => {
-  passport.authenticate("local", { session: false }, (err, user, info) => {
-    if (err || !user) {
-      return res
-        .status(401)
-        .json({ message: info.message || "Authentication failed" });
+  passport.authenticate(
+    "local",
+    { session: false },
+    async (err, user, info) => {
+      if (err || !user) {
+        return res
+          .status(401)
+          .json({ message: info.message || "Authentication failed" });
+      }
+
+      // Generate JWT access token
+      const accessToken = generateAccessToken(user);
+
+      // Generate refresh token
+      const refreshToken = await generateAndSaveRefreshToken({
+        userId: user.id,
+        username: user.username,
+      });
+
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        maxAge: 60 * 60 * 1000,
+        sameSite: "None", // Set SameSite to 'None' for cross-site requests
+        secure: true, // Set 'secure' for cross-site requests over HTTPS
+        path: "/",
+      });
+
+      res.header("Access-Control-Expose-Headers", "Authorization");
+
+      res.json({ accessToken: accessToken });
     }
-
-    // Generate JWT access token
-    const accessToken = generateAccessToken(user);
-
-    // Generate refresh token
-    const refreshToken = generateAndSaveRefreshToken({
-      userId: user.id,
-      username: user.username,
-    });
-
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      maxAge: 60 * 60 * 1000,
-      sameSite: "None", // Set SameSite to 'None' for cross-site requests
-      secure: true, // Set 'secure' for cross-site requests over HTTPS
-      path: "/",
-    });
-
-    res.header("Access-Control-Expose-Headers", "Authorization");
-
-    res.json({ accessToken: accessToken });
-  })(req, res, next);
+  )(req, res, next);
 });
 
 app.get("/protected", authenticateToken, async (req, res) => {
@@ -274,7 +293,7 @@ function generateAccessToken({ id, username }) {
 }
 
 // Generate refresh token
-function generateAndSaveRefreshToken({ userId, username }) {
+async function generateAndSaveRefreshToken({ userId, username }) {
   const refreshToken = jwt.sign(
     { sub: userId, username: username },
     process.env.REFRESH_TOKEN_SECRET,
@@ -282,11 +301,13 @@ function generateAndSaveRefreshToken({ userId, username }) {
       expiresIn: "1d",
     }
   );
-  saveRefreshToken({ refreshToken, userId });
+  await saveRefreshToken({ refreshToken, userId });
   return refreshToken;
 }
 
-function saveRefreshToken({ refreshToken, userId }) {
+async function saveRefreshToken({ refreshToken, userId }) {
+  await RefreshToken.findOneAndDelete({ userId: userId });
+
   const newRefreshToken = new RefreshToken({
     token: refreshToken,
     userId: userId,
@@ -295,39 +316,25 @@ function saveRefreshToken({ refreshToken, userId }) {
 
   newRefreshToken.save();
 }
-// Middleware to check and refresh access token using refresh token
-app.get("/refresh", async (req, res) => {
-  const refreshToken = req.cookies.refreshToken; // take from data base
-  if (!refreshToken) {
-    return res.status(401).json({ message: "Refresh token is required" });
-  }
-
+app.post("/logout", async (req, res) => {
   try {
-    // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    const refreshToken = req.cookies.refreshToken;
 
-    // Find the refresh token in the database
-    const storedRefreshToken = await RefreshToken.findOne({
-      token: refreshToken,
+    // Clear the refresh token from the database
+    await RefreshToken.findOneAndDelete({ token: refreshToken });
+
+    // Clear the refresh token cookie on the client side
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      sameSite: "None",
+      secure: true,
+      path: "/",
     });
 
-    // Check if the refresh token is still valid
-    if (
-      !storedRefreshToken ||
-      decoded.sub !== storedRefreshToken.userId ||
-      storedRefreshToken.expires < Date.now()
-    ) {
-      return res.status(401).json({ message: "Invalid refresh token" });
-    }
-
-    // Generate a new access token
-    const user = await User.findById(decoded.sub);
-    const newAccessToken = generateAccessToken(user);
-
-    // Respond with the new access token
-    res.json({ access_token: newAccessToken });
+    res.status(200).json({ message: "Logout successful" });
   } catch (error) {
-    return res.status(401).json({ message: "Invalid refresh token" });
+    console.error("Error during logout:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
