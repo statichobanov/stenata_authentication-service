@@ -3,7 +3,7 @@
 require("dotenv").config();
 
 const MONGO_URI = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_USER_PASSWORD}@${process.env.CLUSTER}.${process.env.DB_CLOUD_URL}/${process.env.DB}?retryWrites=true&w=majority`;
-console.log("Mongo uri ", MONGO_URI);
+
 const express = require("express");
 const passport = require("passport");
 const LocalStrategy = require("passport-local").Strategy;
@@ -79,11 +79,6 @@ passport.use(
     { usernameField: "username", passwordField: "password" },
     async (username, password, done) => {
       try {
-        console.log(
-          "in new localStrategy Username password: ",
-          username,
-          password
-        );
         const user = await User.findOne({ username });
         if (!user || !(await user.isValidPassword(password))) {
           return done(null, false, {
@@ -110,30 +105,72 @@ passport.deserializeUser((id, done) => {
 });
  */
 
-// Example middleware to extract and verify access token from the header
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  if (!token) {
+  const accessToken = authHeader && authHeader.split(" ")[1];
+
+  if (!accessToken) {
     return res.status(401).json({ message: "Access token is required" });
   }
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (err) {
-      if (err.name === "TokenExpiredError") {
-        const refreshToken = req.headers.cookie.refreshToken;
-        // Token has expired, handle accordingly (e.g., trigger token refresh)
-        return res.status(401).json({ message: "Access token has expired" });
+  jwt.verify(
+    accessToken,
+    process.env.ACCESS_TOKEN_SECRET,
+    async (err, user) => {
+      if (err) {
+        if (err.name === "TokenExpiredError") {
+          // Token has expired, try to get a new access token using the refresh token from cookies
+          const refreshToken = req.headers.cookie.split("=")[1];
+
+          if (!refreshToken) {
+            return res.status(401).json({ message: "Missing Refresh Token" });
+          }
+
+          try {
+            // Verify refresh token
+            const decoded = jwt.verify(
+              refreshToken,
+              process.env.REFRESH_TOKEN_SECRET
+            );
+            console.log("decoded:", decoded);
+            // Check if the refresh token is still valid
+            const refreshTokenDBObject = await RefreshToken.findOne({
+              userId: decoded.sub,
+              token: refreshToken,
+            });
+
+            if (
+              refreshTokenDBObject?.token !== refreshToken ||
+              refreshTokenDBObject?.expires < Date.now()
+            ) {
+              return res.status(401).json({ message: "Invalid refresh token" });
+            }
+
+            const newAccessToken = generateAccessToken({
+              id: decoded.sub,
+              username: decoded.username,
+            });
+
+            req.accessToken = newAccessToken;
+            req.user = {
+              id: decoded.sub,
+              username: decoded.username,
+            };
+            next();
+          } catch (refreshError) {
+            return res.status(401).json({ message: "Failed to refresh token" });
+          }
+        } else {
+          // Token verification failed for reasons other than expiration
+          return res.status(403).json({ message: "Invalid access token" });
+        }
       } else {
-        // Token verification failed for reasons other than expiration
-        return res.status(403).json({ message: "Invalid access token" });
+        // Token is valid; attach user info to request
+        req.user = user;
+        next();
       }
     }
-
-    // Token is valid; attach user info to request
-    req.user = user;
-    next();
-  });
+  );
 };
 
 // Endpoint for user registration
@@ -150,7 +187,7 @@ app.post("/register", async (req, res) => {
     // Create a new user
     const newUser = new User({ username, password, name, email });
     await newUser.save();
-    console.log("/register", newUser);
+
     // Generate JWT access token
     const accessToken = generateAccessToken(newUser);
 
@@ -165,14 +202,13 @@ app.post("/register", async (req, res) => {
       path: "/",
     });
     // Respond with tokens
-    res.json({ access_token: accessToken });
+    res.json({ accessToken: accessToken });
   } catch (error) {
     console.error("Error creating user:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
 
-// Endpoint for user login
 app.post("/login", (req, res, next) => {
   passport.authenticate("local", { session: false }, (err, user, info) => {
     if (err || !user) {
@@ -185,9 +221,11 @@ app.post("/login", (req, res, next) => {
     const accessToken = generateAccessToken(user);
 
     // Generate refresh token
-    const refreshToken = generateAndSaveRefreshToken(user);
+    const refreshToken = generateAndSaveRefreshToken({
+      userId: user.id,
+      username: user.username,
+    });
 
-    // Set HTTP-only cookie with the refreshToken
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       maxAge: 60 * 60 * 1000,
@@ -196,62 +234,69 @@ app.post("/login", (req, res, next) => {
       path: "/",
     });
 
-    // Respond with tokens
     res.header("Access-Control-Expose-Headers", "Authorization");
-    // Respond with tokens
+
     res.json({ accessToken: accessToken });
   })(req, res, next);
 });
 
 app.get("/protected", authenticateToken, async (req, res) => {
+  console.log("req.user /protected", req.user, req.accessToken);
   try {
     const users = await User.find({}, "-password"); // Exclude the password field
-
-    res.json({
-      message: "This is a protected route",
-      user: req.user,
-      allUsers: users,
-    });
+    /* this means authenticateToken middleware has generated a new accessToken */
+    if (req.accessToken) {
+      res.json({
+        accessToken: req.accessToken,
+        message: "This is a protected route",
+        user: res.user,
+        allUsers: users,
+      });
+    } else {
+      res.json({
+        message: "This is a protected route",
+        user: req.user,
+        allUsers: users,
+      });
+    }
   } catch (error) {
-    console.error("Error querying users:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
 
 // Generate JWT access token
-function generateAccessToken(user) {
+function generateAccessToken({ id, username }) {
   return jwt.sign(
-    { sub: user.id, username: user.username },
+    { sub: id, username: username },
     process.env.ACCESS_TOKEN_SECRET,
     { expiresIn: "1h" }
   );
 }
 
 // Generate refresh token
-function generateAndSaveRefreshToken(user) {
+function generateAndSaveRefreshToken({ userId, username }) {
   const refreshToken = jwt.sign(
-    { sub: user.id },
+    { sub: userId, username: username },
     process.env.REFRESH_TOKEN_SECRET,
     {
       expiresIn: "1d",
     }
   );
+  saveRefreshToken({ refreshToken, userId });
+  return refreshToken;
+}
 
-  // Save the refresh token in the database
+function saveRefreshToken({ refreshToken, userId }) {
   const newRefreshToken = new RefreshToken({
     token: refreshToken,
-    userId: user.id,
+    userId: userId,
     expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // Expires in 1 day
   });
 
   newRefreshToken.save();
-
-  return refreshToken;
 }
-
 // Middleware to check and refresh access token using refresh token
 app.get("/refresh", async (req, res) => {
-  console.log("/refresh in httpsonly cookie", req.cookies);
   const refreshToken = req.cookies.refreshToken; // take from data base
   if (!refreshToken) {
     return res.status(401).json({ message: "Refresh token is required" });
@@ -265,7 +310,7 @@ app.get("/refresh", async (req, res) => {
     const storedRefreshToken = await RefreshToken.findOne({
       token: refreshToken,
     });
-    console.log("/refresh Stored refresh token in :", storedRefreshToken);
+
     // Check if the refresh token is still valid
     if (
       !storedRefreshToken ||
