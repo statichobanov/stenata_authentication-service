@@ -2,10 +2,10 @@
   "name": "auth-service",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
     "test": "start",
-    "start": "nodemon index.js"
+    "start": "nodemon app.js"
   },
   "author": "stati.m.chobanov",
   "license": "MIT",

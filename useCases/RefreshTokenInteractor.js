@@ -1,5 +1,4 @@
 "use strict";
-/* Example if not using class to show to Anatoli */
 
 const RefreshToken = require("../entities/RefreshToken");
 
