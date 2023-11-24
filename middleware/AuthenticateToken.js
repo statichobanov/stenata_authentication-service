@@ -1,7 +1,6 @@
 "use strict";
 
 const jwt = require("jsonwebtoken");
-const RefreshTokenInteractor = require("../useCases/RefreshTokenInteractor");
 const AuthInteractor = require("../useCases/AuthInteractor");
 
 async function authenticateToken(req, res, next) {
@@ -10,7 +9,6 @@ async function authenticateToken(req, res, next) {
   const refreshToken = req.headers.cookie?.split("=")[1];
   console.log("authenticateToken: ", accessToken, refreshToken);
   const authInteractor = new AuthInteractor();
-  const refreshTokenInteractor = new RefreshTokenInteractor();
 
   if (!accessToken || !refreshToken) {
     return res.status(401).json({ message: "Missing Token" });
@@ -20,18 +18,17 @@ async function authenticateToken(req, res, next) {
     refreshToken,
     process.env.REFRESH_TOKEN_SECRET
   );
+  let refreshTokenDBObject = await authInteractor.findRefreshToken(
+    refreshToken
+  );
 
-  const refreshTokenDBObject = await refreshTokenInteractor.findRefreshToken({
-    userId: decodedRefreshToken.sub,
-  });
-
-  if (!refreshTokenDBObject) {
+  if (!refreshTokenDBObject[0]) {
     return res.status(403).json({ message: "Invalid refresh token" });
   }
 
   if (
-    refreshTokenDBObject.token !== refreshToken ||
-    refreshTokenDBObject.expires < Date.now()
+    refreshTokenDBObject[0].token !== refreshToken ||
+    refreshTokenDBObject[0].expires < Date.now()
   ) {
     return res.status(401).json({ message: "Invalid refresh token" });
   }

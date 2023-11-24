@@ -2,7 +2,7 @@
 
 const RefreshToken = require("../entities/RefreshToken");
 
-class RefreshTokenInteractor {
+class RefreshTokenRepository {
   async saveRefreshToken({ refreshToken, userId }) {
     const newRefreshToken = new RefreshToken({
       token: refreshToken,
@@ -14,7 +14,9 @@ class RefreshTokenInteractor {
   }
 
   async deleteRefreshToken({ userId }) {
-    await RefreshToken.findOneAndDelete({ userId: userId });
+    const deletedToken = await RefreshToken.findOneAndDelete({
+      userId: userId,
+    });
 
     /* just for info */
     if (deletedToken) {
@@ -24,9 +26,9 @@ class RefreshTokenInteractor {
     }
   }
 
-  async findRefreshToken({ userId }) {
-    return await RefreshToken.find({ userId: userId });
+  async findRefreshToken(refreshToken) {
+    return await RefreshToken.find({ token: refreshToken });
   }
 }
 
-module.exports = RefreshTokenInteractor;
+module.exports = RefreshTokenRepository;

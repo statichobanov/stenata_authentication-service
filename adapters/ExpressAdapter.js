@@ -9,13 +9,12 @@ const initPassport = require("../config/passportConfig");
 const authenticateToken = require("../middleware/AuthenticateToken");
 
 class ExpressAdapter {
-  constructor(userInteractor, authInteractor, refreshTokenInteractor) {
+  constructor(userInteractor, authInteractor) {
     this.userInteractor = userInteractor;
     this.authInteractor = authInteractor;
-    this.refreshTokenInteractor = refreshTokenInteractor;
 
     /* Initialize Passport local strategy config */
-    initPassport(this.userInteractor);
+    initPassport();
   }
 
   initConfigs(app) {
@@ -46,11 +45,12 @@ class ExpressAdapter {
       });
 
       const accessToken = this.authInteractor.generateAccessToken(newUser);
-      const refreshToken =
-        await this.authInteractor.generateAndSaveRefreshToken({
-          userId: newUser.id,
-          username: newUser.username,
-        });
+      const refreshToken = this.authInteractor.generateRefreshToken(newUser);
+
+      await this.authInteractor.saveRefreshToken({
+        userId: newUser.id,
+        refreshToken: refreshToken,
+      });
 
       res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
@@ -68,36 +68,35 @@ class ExpressAdapter {
   }
 
   login(req, res, next) {
-    passport.authenticate(
-      "local",
-      { session: false },
-      async (err, user, info) => {
-        if (err || !user) {
-          return res
-            .status(401)
-            .json({ message: info.message || "Authentication failed" });
-        }
-
-        const accessToken = this.authInteractor.generateAccessToken(user);
-        const refreshToken =
-          await this.authInteractor.generateAndSaveRefreshToken({
-            userId: user.id,
-            username: user.username,
-          });
-
-        res.cookie("refreshToken", refreshToken, {
-          httpOnly: true,
-          maxAge: 60 * 60 * 1000,
-          sameSite: "None",
-          secure: true,
-          path: "/",
-        });
-
-        res.header("Access-Control-Expose-Headers", "Authorization");
-
-        res.json({ accessToken: accessToken });
+    console.log("login");
+    passport.authenticate("local", { session: false }, async (err, user) => {
+      console.log("login user", user);
+      if (err || !user) {
+        return res
+          .status(401)
+          .json({ message: err || "Authentication failed" });
       }
-    )(req, res, next);
+
+      const accessToken = this.authInteractor.generateAccessToken(user);
+
+      const refreshToken = this.authInteractor.generateRefreshToken(user);
+      await this.authInteractor.saveRefreshToken({
+        userId: user.id,
+        refreshToken: refreshToken,
+      });
+
+      res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        maxAge: 60 * 60 * 1000,
+        sameSite: "None",
+        secure: true,
+        path: "/",
+      });
+
+      res.header("Access-Control-Expose-Headers", "Authorization");
+
+      res.json({ accessToken: accessToken });
+    })(req, res, next);
   }
 
   async protected(req, res) {
@@ -124,9 +123,9 @@ class ExpressAdapter {
 
   async logout(req, res) {
     try {
-      const refreshToken = req.cookies.refreshToken;
+      const refreshToken = req.headers.cookie?.split("=")[1];
 
-      await this.refreshTokenInteractor.deleteRefreshToken(refreshToken);
+      await this.authInteractor.deleteRefreshToken(refreshToken);
 
       res.clearCookie("refreshToken", {
         httpOnly: true,

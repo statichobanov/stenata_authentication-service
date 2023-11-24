@@ -5,7 +5,6 @@ const mongoose = require("mongoose");
 const ExpressAdapter = require("./adapters/ExpressAdapter");
 const AuthInteractor = require("./useCases/AuthInteractor");
 const UserInteractor = require("./useCases/UserInteractor");
-const RefreshTokenInteractor = require("./useCases/RefreshTokenInteractor"); // Add RefreshTokenInteractor
 
 const MONGO_URI = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_USER_PASSWORD}@${process.env.CLUSTER}.${process.env.DB_CLOUD_URL}/${process.env.DB}?retryWrites=true&w=majority`;
 
@@ -19,13 +18,9 @@ try {
 }
 
 const userInteractor = new UserInteractor();
-const authInteractor = new AuthInteractor(); // Instantiate AuthInteractor
-const refreshTokenInteractor = new RefreshTokenInteractor(); // Instantiate RefreshTokenInteractor
-const expressAdapter = new ExpressAdapter(
-  userInteractor,
-  authInteractor,
-  refreshTokenInteractor
-);
+const authInteractor = new AuthInteractor();
+
+const expressAdapter = new ExpressAdapter(userInteractor, authInteractor);
 
 const express = require("express");
 const app = express();
