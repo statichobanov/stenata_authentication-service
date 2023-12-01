@@ -1,7 +1,7 @@
 # auth-service
 
+|-- adapters
 |-- config
-|-- controllers
 |-- entities(models)
 |-- repositories(data-access)
 |-- middleware

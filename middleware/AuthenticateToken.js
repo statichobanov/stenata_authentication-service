@@ -7,7 +7,7 @@ async function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const accessToken = authHeader && authHeader.split(" ")[1];
   const refreshToken = req.headers.cookie?.split("=")[1];
-  console.log("authenticateToken: ", accessToken, refreshToken);
+
   const authInteractor = new AuthInteractor();
 
   if (!accessToken || !refreshToken) {
@@ -18,6 +18,7 @@ async function authenticateToken(req, res, next) {
     refreshToken,
     process.env.REFRESH_TOKEN_SECRET
   );
+  // TODO: think if it is possible to find token only with userid since we delete all asocciated refreshTokens
   let refreshTokenDBObject = await authInteractor.findRefreshToken(
     refreshToken
   );

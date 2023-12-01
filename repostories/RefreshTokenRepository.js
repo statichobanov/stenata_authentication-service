@@ -13,16 +13,16 @@ class RefreshTokenRepository {
     newRefreshToken.save();
   }
 
-  async deleteRefreshToken({ userId }) {
-    const deletedToken = await RefreshToken.findOneAndDelete({
-      userId: userId,
-    });
+  async deleteAllRefreshTokens({ userId }) {
+    const result = await RefreshToken.deleteMany({ userId: userId });
 
     /* just for info */
-    if (deletedToken) {
-      console.log(`Deleted existing token for userId: ${userId}`);
+    if (result.deletedCount > 0) {
+      console.log(
+        `Deleted ${result.deletedCount} tokens for userId: ${userId}`
+      );
     } else {
-      console.log(`No existing token found for userId: ${userId}`);
+      console.log(`No existing tokens found for userId: ${userId}`);
     }
   }
 

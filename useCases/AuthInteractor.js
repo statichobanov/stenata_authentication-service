@@ -39,8 +39,10 @@ class AuthInteractor {
     return await this.refreshTokenRepository.findRefreshToken(refreshToken);
   }
 
-  async deleteRefreshToken(refreshToken) {
-    await this.refreshTokenRepository.deleteRefreshToken(refreshToken);
+  async deleteAllRefreshTokens({ userId }) {
+    await this.refreshTokenRepository.deleteAllRefreshTokens({
+      userId: userId,
+    });
   }
 }
 

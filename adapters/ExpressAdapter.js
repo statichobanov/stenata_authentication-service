@@ -31,7 +31,7 @@ class ExpressAdapter {
     app.post("/register", this.register.bind(this));
     app.post("/login", this.login.bind(this));
     app.get("/protected", authenticateToken, this.protected.bind(this));
-    app.post("/logout", this.logout.bind(this));
+    app.post("/logout", authenticateToken, this.logout.bind(this));
   }
 
   async register(req, res) {
@@ -68,7 +68,6 @@ class ExpressAdapter {
   }
 
   login(req, res, next) {
-    console.log("login");
     passport.authenticate("local", { session: false }, async (err, user) => {
       console.log("login user", user);
       if (err || !user) {
@@ -99,6 +98,7 @@ class ExpressAdapter {
     })(req, res, next);
   }
 
+  /* This Route is added only for testing purpose */
   async protected(req, res) {
     try {
       const users = await this.userInteractor.findAllUsers();
@@ -123,9 +123,11 @@ class ExpressAdapter {
 
   async logout(req, res) {
     try {
-      const refreshToken = req.headers.cookie?.split("=")[1];
-
-      await this.authInteractor.deleteRefreshToken(refreshToken);
+      /* const refreshToken = req.headers.cookie?.split("=")[1];
+       */
+      await this.authInteractor.deleteAllRefreshTokens({
+        userId: req.user.sub,
+      });
 
       res.clearCookie("refreshToken", {
         httpOnly: true,
