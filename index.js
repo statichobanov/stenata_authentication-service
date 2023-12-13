@@ -260,7 +260,6 @@ app.post("/login", (req, res, next) => {
 });
 
 app.get("/protected", authenticateToken, async (req, res) => {
-  console.log("req.user /protected", req.user, req.accessToken);
   try {
     const users = await User.find({}, "-password"); // Exclude the password field
     /* this means authenticateToken middleware has generated a new accessToken */
