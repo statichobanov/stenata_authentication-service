@@ -4,10 +4,18 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
 const userSchema = new mongoose.Schema({
-  username: String,
+  version: { type: Number, default: 1 },
+  username: { type: String, unique: true, required: true },
+  email: {
+    type: String,
+    unique: true,
+    required: true,
+  },
+  author: { type: Boolean },
+  registrationDate: { type: Date, default: Date.now },
+  firstName: String,
+  lastName: String,
   password: String,
-  name: String,
-  email: String,
 });
 
 userSchema.pre("save", async function (next) {
@@ -22,7 +30,6 @@ userSchema.pre("save", async function (next) {
 });
 
 userSchema.methods.isValidPassword = async function (password) {
-  console.log("userSchema.methods.isValidPassword", password, this.password);
   try {
     return await bcrypt.compare(password, this.password);
   } catch (error) {

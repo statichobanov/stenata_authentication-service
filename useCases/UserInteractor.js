@@ -7,7 +7,9 @@ class UserInteractor {
     this.userRepository = new UserRepository();
   }
 
-  async register({ username, password, name, email }) {
+  async register(user) {
+    const { username } = user;
+
     try {
       const existingUser = await this.userRepository.findUserByUsername(
         username
@@ -17,12 +19,7 @@ class UserInteractor {
         throw new Error("Username already taken");
       }
 
-      const newUser = this.userRepository.createUser({
-        username: username,
-        password: password,
-        name: name,
-        email: email,
-      });
+      const newUser = this.userRepository.createUser(user);
 
       return newUser;
     } catch (error) {
@@ -30,9 +27,9 @@ class UserInteractor {
     }
   }
 
-  async login(username, password) {
+  async login(email, password) {
     try {
-      const user = await this.userRepository.findUserByUsername(username);
+      const user = await this.userRepository.findUserByEmail(email);
 
       if (!user || !(await user.isValidPassword(password))) {
         throw new Error("Incorrect username or password");

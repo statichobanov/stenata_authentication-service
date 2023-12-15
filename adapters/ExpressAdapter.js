@@ -19,7 +19,7 @@ class ExpressAdapter {
 
   initConfigs(app) {
     const corsOptions = {
-      origin: "http://localhost:4000",
+      origin: "http://localhost:4200",
       credentials: true,
     };
 
@@ -27,7 +27,6 @@ class ExpressAdapter {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Register routes
     app.post("/register", this.register.bind(this));
     app.post("/login", this.login.bind(this));
     app.get("/protected", authenticateToken, this.protected.bind(this));
@@ -36,13 +35,9 @@ class ExpressAdapter {
 
   async register(req, res) {
     try {
-      const { username, password, name, email } = req.body;
-      const newUser = await this.userInteractor.register({
-        username,
-        password,
-        name,
-        email,
-      });
+      /* TODO  */
+      const newUserPayload = req.body;
+      const newUser = await this.userInteractor.register(newUserPayload);
 
       const accessToken = this.authInteractor.generateAccessToken(newUser);
       const refreshToken = this.authInteractor.generateRefreshToken(newUser);
@@ -62,14 +57,15 @@ class ExpressAdapter {
 
       res.json({ accessToken: accessToken });
     } catch (error) {
-      console.error("Error creating user:", error);
+      console.log("Error Register User:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }
 
   login(req, res, next) {
     passport.authenticate("local", { session: false }, async (err, user) => {
-      console.log("login user", user);
+      console.log("Login User", user);
+
       if (err || !user) {
         return res
           .status(401)
@@ -79,6 +75,7 @@ class ExpressAdapter {
       const accessToken = this.authInteractor.generateAccessToken(user);
 
       const refreshToken = this.authInteractor.generateRefreshToken(user);
+
       await this.authInteractor.saveRefreshToken({
         userId: user.id,
         refreshToken: refreshToken,
@@ -138,7 +135,7 @@ class ExpressAdapter {
 
       res.status(200).json({ message: "Logout successful" });
     } catch (error) {
-      console.error("Error during logout:", error);
+      console.log("Error During Logout:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }

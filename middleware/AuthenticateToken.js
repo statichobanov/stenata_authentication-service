@@ -18,18 +18,19 @@ async function authenticateToken(req, res, next) {
     refreshToken,
     process.env.REFRESH_TOKEN_SECRET
   );
-  // TODO: think if it is possible to find token only with userid since we delete all asocciated refreshTokens
-  let refreshTokenDBObject = await authInteractor.findRefreshToken(
+  // TODO: think if it is possible to find token only with userid since we delete all asocciated refreshTokens on logout
+  const refreshTokenDBObject = await authInteractor.findRefreshToken(
     refreshToken
   );
+  const refreshTokenDB = refreshTokenDBObject[0];
 
-  if (!refreshTokenDBObject[0]) {
+  if (!refreshTokenDB) {
     return res.status(403).json({ message: "Invalid refresh token" });
   }
 
   if (
-    refreshTokenDBObject[0].token !== refreshToken ||
-    refreshTokenDBObject[0].expires < Date.now()
+    refreshTokenDB.token !== refreshToken ||
+    refreshTokenDB.expires < Date.now()
   ) {
     return res.status(401).json({ message: "Invalid refresh token" });
   }
