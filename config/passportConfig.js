@@ -7,13 +7,11 @@ const UserRepository = require("../repostories/UserRepository");
 function initPassport() {
   passport.use(
     new LocalStrategy(
-      { usernameField: "username", passwordField: "password" },
-      async (username, password, done) => {
-        console.log("init passport", username, password);
+      { usernameField: "email", passwordField: "password" },
+      async (email, password, done) => {
         try {
           const userRepository = new UserRepository();
-          const user = await userRepository.findUserByUsername(username);
-
+          const user = await userRepository.findUserByEmail(email);
           if (!user || !(await user.isValidPassword(password))) {
             return done(null, false, {
               message: "Incorrect username or password",
@@ -21,6 +19,7 @@ function initPassport() {
           }
           return done(null, user);
         } catch (error) {
+          console.log("initPassport error", error);
           return done(error);
         }
       }
