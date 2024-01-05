@@ -29,8 +29,16 @@ class ExpressAdapter {
 
     app.post("/register", this.register.bind(this));
     app.post("/login", this.login.bind(this));
-    app.get("/protected", authenticateToken, this.protected.bind(this));
-    app.post("/logout", authenticateToken, this.logout.bind(this));
+    app.get(
+      "/protected",
+      authenticateToken(this.authInteractor),
+      this.protected.bind(this)
+    );
+    app.post(
+      "/logout",
+      authenticateToken(this.authInteractor),
+      this.logout.bind(this)
+    );
   }
 
   async register(req, res) {
