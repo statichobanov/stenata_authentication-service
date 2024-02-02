@@ -3,7 +3,6 @@
 "use strict";
 
 const express = require("express");
-const passport = require("passport");
 const cors = require("cors");
 const initPassport = require("../config/passportConfig");
 const authenticateToken = require("../middleware/AuthenticateToken");
@@ -28,20 +27,27 @@ class ExpressAdapter {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    app.post(
-      "/register",
-      this.authController.register.bind(this.authController)
+    app.post("/register", (req, res, next) =>
+      this.authController.register(req, res, next)
     );
-    app.post("/login", this.authController.login.bind(this.authController));
+    app.post("/login", (req, res, next) =>
+      this.authController.login(req, res, next)
+    );
+
     app.get(
       "/protected",
       authenticateToken(this.authInteractor),
-      this.authController.protected.bind(this.authController)
+      (req, res, next) => {
+        this.authController.protected(req, res, next);
+      }
     );
+
     app.post(
       "/logout",
       authenticateToken(this.authInteractor),
-      this.authController.logout.bind(this.authController)
+      (req, res, next) => {
+        this.authController.logout(req, res, next);
+      }
     );
   }
 }

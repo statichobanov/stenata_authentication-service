@@ -287,7 +287,7 @@ function generateAccessToken({ id, username }) {
   return jwt.sign(
     { sub: id, username: username },
     process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: "1h" }
+    { expiresIn: "120" }
   );
 }
 

@@ -22,14 +22,6 @@ class AuthController {
         refreshToken: refreshToken,
       });
 
-      res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        maxAge: 60 * 60 * 1000,
-        sameSite: "None",
-        secure: true,
-        path: "/",
-      });
-
       res.json({ accessToken: accessToken });
     } catch (error) {
       console.log("Error Register User:", error);
@@ -55,16 +47,6 @@ class AuthController {
         userId: user.id,
         refreshToken: refreshToken,
       });
-
-      res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        maxAge: 60 * 60 * 1000,
-        sameSite: "None",
-        secure: true,
-        path: "/",
-      });
-
-      res.header("Access-Control-Expose-Headers", "Authorization");
 
       res.json({ accessToken: accessToken });
     })(req, res, next);
@@ -95,14 +77,7 @@ class AuthController {
   async logout(req, res) {
     try {
       await this.authInteractor.deleteAllRefreshTokens({
-        userId: req.user.sub,
-      });
-
-      res.clearCookie("refreshToken", {
-        httpOnly: true,
-        sameSite: "None",
-        secure: true,
-        path: "/",
+        userId: req.user.id,
       });
 
       res.status(200).json({ message: "Logout successful" });

@@ -26,8 +26,8 @@ class RefreshTokenRepository {
     }
   }
 
-  async findRefreshToken(refreshToken) {
-    return await RefreshToken.find({ token: refreshToken });
+  async findRefreshToken(userId) {
+    return await RefreshToken.find({ userId: userId });
   }
 }
 

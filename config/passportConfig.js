@@ -9,12 +9,13 @@ function initPassport() {
     new LocalStrategy(
       { usernameField: "email", passwordField: "password" },
       async (email, password, done) => {
+        console.log(email, password);
         try {
           const userRepository = new UserRepository();
           const user = await userRepository.findUserByEmail(email);
           if (!user || !(await user.isValidPassword(password))) {
             return done(null, false, {
-              message: "Incorrect username or password",
+              message: "Incorrect email or password",
             });
           }
           return done(null, user);
